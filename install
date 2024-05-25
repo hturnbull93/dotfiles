@@ -29,6 +29,8 @@ brew install --cask visual-studio-code
 # install WhatsApp
 brew install --cask whatsapp
 
+# install Todoist
+brew install --cask todoist
 
 # install Spotify
 brew install --cask spotify
