@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+# install homebrew
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# install zsh
+brew install zsh
+chsh -s /usr/local/bin/zsh
+
+# install omz
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+
+# install non powerline agnoster theme
+git clone git@github.com:fletom/agnoster-no-powerline-zsh-theme.git ~/agnoster-no-powerline
+cp ~/agnoster-no-powerline/agnoster-no-powerline.zsh-theme ~/.oh-my-zsh/themes
+rm -rf ~/agnoster-no-powerline
+echo ZSH_THEME="agnoster-no-powerline"\n >> ~/.zshrc
+
+# install The Fuck
+brew install thefuck
+echo 'eval $(thefuck --alias)\n' >> ~/.zshrc
+
+# install rectangle
+brew install rectangle
+
+# install viscose
+brew install --cask visual-studio-code
+
+# install WhatsApp
+brew install --cask whatsapp
+
+# install ppm
+npm install -g pnpm
+
+# install Spotify
+brew install --cask spotify
