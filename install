@@ -23,7 +23,7 @@ echo 'eval $(thefuck --alias)\n' >> ~/.zshrc
 # install rectangle
 brew install rectangle
 
-# install viscose
+# install VSCode
 brew install --cask visual-studio-code
 
 # install WhatsApp
@@ -34,6 +34,9 @@ brew install --cask todoist
 
 # install Spotify
 brew install --cask spotify
+
+# install Discord
+brew install --cask discord
 
 # install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
