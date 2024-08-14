@@ -41,6 +41,9 @@ brew install --cask discord
 # install Steam
 brew install --cask steam
 
+# install OBS
+brew install --cask obs
+
 # install nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
