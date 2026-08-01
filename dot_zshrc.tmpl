@@ -23,9 +23,10 @@ zstyle ':completion:*:*:make:*' tag-order targets variables
 # Source Oh-My-Zsh
 source $ZSH/oh-my-zsh.sh
 
-{{- if ne .chezmoi.os "darwin" }}
-PRIMARY_FG=red
-{{- end }}
+case "$HOST" in
+  Bigun*) PRIMARY_FG=black ;;
+  *)      PRIMARY_FG=green ;;
+esac
 
 # =============================================================================
 # Custom Functions
