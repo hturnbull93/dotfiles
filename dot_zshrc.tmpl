@@ -107,8 +107,10 @@ alias chrome-debug='open -a "Google Chrome" --args --remote-debugging-port=9222 
 alias editomz="code ~/.oh-my-zsh"
 {{- end }}
 
+{{- if eq .chezmoi.os "darwin" }}
 # Thefuck alias correction
 eval $(thefuck --alias)
+{{- end }}
 
 # GitHub PR viewer - opens current branch PR in browser
 prw() {
@@ -126,7 +128,7 @@ prw() {
 # =============================================================================
 
 # npm tab completion
-source <(npm completion)
+command -v npm &>/dev/null && source <(npm completion)
 
 # =============================================================================
 # Version Managers
