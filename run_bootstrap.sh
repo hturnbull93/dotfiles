@@ -37,4 +37,10 @@ if [[ "$(uname)" == "Linux" ]]; then
     sudo dnf install -y fzf
   fi
 
+  # lsof (needed by kill-p)
+  if ! command -v lsof &>/dev/null; then
+    echo "installing lsof..."
+    sudo dnf install -y lsof
+  fi
+
 fi
