@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# Toggle caffeinate (keep system awake) and lid-close sleep prevention together.
+set -euo pipefail
+
+STATE_FILE="${TMPDIR:-/tmp}/.awake-caffeinate-pid"
+TIMER_FILE="${TMPDIR:-/tmp}/.awake-timer-pid"
+TIMER_INFO_FILE="${TMPDIR:-/tmp}/.awake-timer-info"
+
+usage() {
+  cat <<'EOF'
+awake <command>
+
+Keeps the Mac from sleeping (incl. on lid close) until turned off.
+
+Commands (any of these words work):
+  on, start, enable, keep awake, stay awake   -> turn on
+  off, stop, disable, let it sleep, sleep     -> turn off
+  status, state                               -> show current state
+  ... until <time>                            -> turn on, auto-off at <time>
+                                                  e.g. "stay awake until 7pm"
+  anything else                                -> sent to `claude -p` to work
+                                                  out the intent, e.g.
+                                                  "awake until the claude in
+                                                  repo catalyse finishes"
+EOF
+}
+
+# epoch for the next occurrence of a clock time, e.g. "7pm", "7:30am", "19:00"
+time_to_epoch() {
+  local spec="$1" now today_epoch target
+  now="$(date +%s)"
+  # BSD date fills any field missing from the format with the current time,
+  # so a bare hour ("7pm", "23") must get an explicit ":00" or it inherits
+  # the current minute instead of meaning the top of the hour.
+  if [[ "$spec" =~ ^([0-9]{1,2})(am|pm)$ ]]; then
+    spec="${BASH_REMATCH[1]}:00${BASH_REMATCH[2]}"
+  elif [[ "$spec" =~ ^[0-9]{1,2}$ ]]; then
+    spec="${spec}:00"
+  fi
+  for fmt in "%I:%M%p" "%H:%M"; do
+    if target="$(date -j -f "$fmt" "$spec" +%H:%M 2>/dev/null)"; then
+      today_epoch="$(date -j -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) $target" +%s 2>/dev/null)" || continue
+      if (( today_epoch <= now )); then
+        today_epoch="$(date -j -v+1d -f "%Y-%m-%d %H:%M" "$(date +%Y-%m-%d) $target" +%s)"
+      fi
+      echo "$today_epoch"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# true if a process matching $1 (by name/cmdline substring) is running,
+# optionally narrowed to one whose cwd contains the $2 fragment
+process_running() {
+  local name="$1" repo="$2" pid cwd
+  for pid in $(pgrep -fi "$name" 2>/dev/null); do
+    if [[ -n "$repo" ]]; then
+      cwd="$(lsof -p "$pid" -a -d cwd -Fn 2>/dev/null | awk 'NR==2{print substr($0,2)}')"
+      [[ "$cwd" == *"$repo"* ]] && return 0
+    else
+      return 0
+    fi
+  done
+  return 1
+}
+
+clear_timer() {
+  if [[ -f "$TIMER_FILE" ]]; then
+    kill "$(cat "$TIMER_FILE")" 2>/dev/null || true
+    rm -f "$TIMER_FILE"
+  fi
+  rm -f "$TIMER_INFO_FILE"
+}
+
+is_on() {
+  [[ -f "$STATE_FILE" ]] && kill -0 "$(cat "$STATE_FILE")" 2>/dev/null
+}
+
+turn_on() {
+  if is_on; then
+    if sudo -n pmset -b disablesleep 1 2>/dev/null; then
+      echo "already on (caffeinate pid $(cat "$STATE_FILE")), lid-close sleep confirmed disabled"
+    else
+      echo "already on (caffeinate pid $(cat "$STATE_FILE")), WARNING: couldn't confirm lid-close sleep is disabled" >&2
+    fi
+    return
+  fi
+  if ! sudo -v; then
+    echo "aborting: sudo failed, so lid-close sleep could not be disabled (caffeinate alone does NOT stop lid-close sleep)" >&2
+    exit 1
+  fi
+  sudo pmset -b disablesleep 1
+  caffeinate -dis &
+  disown
+  echo $! > "$STATE_FILE"
+  echo "on: caffeinate running (pid $!), lid-close sleep disabled"
+}
+
+turn_off() {
+  clear_timer
+  if is_on; then
+    kill "$(cat "$STATE_FILE")" 2>/dev/null || true
+  fi
+  rm -f "$STATE_FILE"
+  if sudo pmset -b disablesleep 0; then
+    echo "off: caffeinate stopped, lid-close sleep re-enabled"
+  else
+    echo "off: caffeinate stopped, but lid-close sleep re-enable FAILED (sudo failed)" >&2
+  fi
+}
+
+status() {
+  if is_on; then
+    echo -n "on (caffeinate pid $(cat "$STATE_FILE"))"
+    if [[ -f "$TIMER_INFO_FILE" ]]; then
+      echo -n ", $(cat "$TIMER_INFO_FILE")"
+    fi
+    echo
+  else
+    echo "off"
+  fi
+}
+
+# turns on, then backgrounds a poller that turns off once the time deadline
+# passes and/or the matched process is no longer running
+schedule_until() {
+  local target_epoch="$1" proc_name="$2" repo_hint="$3" msg
+  clear_timer
+  turn_on
+  (
+    while true; do
+      if [[ -n "$target_epoch" ]] && (( $(date +%s) >= target_epoch )); then
+        break
+      fi
+      if [[ -n "$proc_name" ]] && ! process_running "$proc_name" "$repo_hint"; then
+        break
+      fi
+      sleep 5
+    done
+    "$0" off
+  ) &
+  disown
+  echo $! > "$TIMER_FILE"
+  msg="will allow sleep again"
+  [[ -n "$target_epoch" ]] && msg+=" at $(date -r "$target_epoch" '+%H:%M')"
+  [[ -n "$proc_name" ]] && msg+=" when '$proc_name'${repo_hint:+ (in $repo_hint)} finishes"
+  echo "$msg" > "$TIMER_INFO_FILE"
+  echo "$msg"
+}
+
+# asks `claude -p` to turn free-form text into structured intent; prints the
+# parsed JSON on success, returns non-zero on failure
+llm_parse() {
+  local text="$1" claude_bin schema raw structured
+  claude_bin="$(command -v claude || echo "$HOME/.local/bin/claude")"
+  schema='{"type":"object","properties":{"action":{"type":"string","enum":["on","off","status"]},"until_time":{"type":["string","null"],"description":"24h HH:MM clock time, or null"},"until_process_name":{"type":["string","null"],"description":"short substring to match a running process by name or command line, or null"},"until_repo_hint":{"type":["string","null"],"description":"directory or repo name fragment to narrow which matching process is meant, or null"}},"required":["action","until_time","until_process_name","until_repo_hint"],"additionalProperties":false}'
+  raw="$(printf '%s' "$text" | "$claude_bin" -p --model claude-haiku-5-5 --restricted --no-session-persistence \
+    --system-prompt "Extract structured intent from a request to a macOS sleep-prevention toggle CLI called awake. Reply only with the schema fields." \
+    --output-format=json --json-schema "$schema" 2>/dev/null)" || return 1
+  structured="$(echo "$raw" | jq -c '.structured_output // empty' 2>/dev/null)"
+  [[ -z "$structured" || "$structured" == "null" ]] && return 1
+  echo "$structured"
+}
+
+handle_llm() {
+  local text="$1" parsed action until_time proc repo target_epoch=""
+  echo "asking claude what you mean..." >&2
+  if ! parsed="$(llm_parse "$text")"; then
+    echo "couldn't work out '$text' (claude call failed)" >&2
+    usage
+    exit 1
+  fi
+  action="$(echo "$parsed" | jq -r '.action')"
+  until_time="$(echo "$parsed" | jq -r '.until_time // empty')"
+  proc="$(echo "$parsed" | jq -r '.until_process_name // empty')"
+  repo="$(echo "$parsed" | jq -r '.until_repo_hint // empty')"
+
+  case "$action" in
+    off) turn_off; return ;;
+    status) status; return ;;
+  esac
+
+  if [[ -n "$until_time" ]]; then
+    if ! target_epoch="$(time_to_epoch "$until_time")"; then
+      echo "claude parsed a time ('$until_time') I couldn't resolve" >&2
+      exit 1
+    fi
+  fi
+
+  if [[ -z "$target_epoch" && -z "$proc" ]]; then
+    turn_on
+    return
+  fi
+  schedule_until "$target_epoch" "$proc" "$repo"
+}
+
+# collapse all args into one string so phrases like "keep awake" match as a whole
+input="$(echo "$*" | tr '[:upper:]' '[:lower:]')"
+
+input="${input/until midday/until 12:00}"
+input="${input/until noon/until 12:00}"
+input="${input/until midnight/until 00:00}"
+
+if [[ "$input" =~ until[[:space:]]+([0-9]{1,2}(:[0-9]{2})?[[:space:]]*(am|pm)?)([[:space:]]|$) ]]; then
+  time_spec="$(echo "${BASH_REMATCH[1]}" | tr -d ' ')"
+  if target_epoch="$(time_to_epoch "$time_spec")"; then
+    schedule_until "$target_epoch" "" ""
+    exit 0
+  fi
+  # fall through below if it didn't look like a real clock time
+fi
+
+# any "until ..."/"while ..." clause that wasn't a plain clock time needs
+# the LLM to work out what it refers to, before the plain keyword matching
+# below mistakes words like "awake" or "stop" elsewhere in the sentence
+if [[ "$input" =~ (until|while)[[:space:]] ]]; then
+  handle_llm "$*"
+  exit 0
+fi
+
+case "$input" in
+  ""|help|-h|--help)
+    usage
+    ;;
+  *status*|*state*)
+    status
+    ;;
+  *off*|*stop*|*disable*|*sleep*)
+    turn_off
+    ;;
+  *on*|*start*|*enable*|*awake*|*stay*)
+    turn_on
+    ;;
+  *)
+    handle_llm "$*"
+    ;;
+esac
