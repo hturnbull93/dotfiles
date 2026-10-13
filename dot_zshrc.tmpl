@@ -324,5 +324,31 @@ railway-pr-logs() {
   railway logs --project "$project_id" --environment "$env_name" --service web --latest
 }
 
+{{- if eq .chezmoi.os "darwin" }}
+
+# Starts Docker Desktop on demand, then runs the docker command as normal.
+docker() {
+  # Commands that never need the daemon go straight through.
+  case "$1" in ''|-v|--version|help|--help) command docker "$@"; return ;; esac
+
+  if ! command docker info >/dev/null 2>&1; then
+    echo "Docker isn't running, starting Docker Desktop..." >&2
+    open -ga Docker || return 1
+    local waited=0
+    until command docker info >/dev/null 2>&1; do
+      sleep 2
+      waited=$((waited + 2))
+      if [ "$waited" -ge 180 ]; then
+        echo "Docker still isn't ready after ${waited}s, giving up." >&2
+        return 1
+      fi
+    done
+    echo "Docker is ready after ${waited}s." >&2
+  fi
+
+  command docker "$@"
+}
+{{- end }}
+
 # Machine-local overrides (not tracked by chezmoi)
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
