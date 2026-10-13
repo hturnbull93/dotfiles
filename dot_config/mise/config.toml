@@ -1,0 +1,10 @@
+# Global tool versions (managed by chezmoi). Projects can override with
+# mise.toml or .nvmrc / .node-version.
+[tools]
+node = "24"
+pnpm = "latest"
+uv = "latest"
+
+[settings]
+# Read existing .nvmrc / .node-version files (off by default in recent mise)
+idiomatic_version_file_enable_tools = ["node"]

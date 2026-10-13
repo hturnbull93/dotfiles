@@ -16,14 +16,20 @@ ln -sf "$TARGET/settings.json" "$HOME/.claude/settings.json"
 ln -sf "$TARGET/statusline-command.sh" "$HOME/.claude/statusline-command.sh"
 echo "claude-code-settings: symlinks created"
 
+# mise (replaces nvm; tool versions in ~/.config/mise/config.toml)
+if ! command -v mise &>/dev/null && [[ ! -x "$HOME/.local/bin/mise" ]]; then
+  echo "installing mise..."
+  if [[ "$(uname)" == "Darwin" ]]; then
+    brew install mise
+  else
+    curl -fsSL https://mise.run | sh
+  fi
+fi
+MISE="$(command -v mise || echo "$HOME/.local/bin/mise")"
+"$MISE" install --yes
+
 # Linux-only tool installs
 if [[ "$(uname)" == "Linux" ]]; then
-
-  # NVM
-  if [[ ! -d "$HOME/.nvm" ]]; then
-    echo "installing nvm..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-  fi
 
   # gh CLI
   if ! command -v gh &>/dev/null; then
