@@ -228,11 +228,7 @@ claude() {
   unset ANTHROPIC_BASE_URL
   unset ANTHROPIC_AUTH_TOKEN
   unset OPENROUTER_API_KEY
-  if [[ " $* " != *" --model "* ]]; then
-    command claude --model claude-sonnet-5 "$@"
-  else
-    command claude "$@"
-  fi
+  command claude "$@"
 }
 
 kill-p() {
