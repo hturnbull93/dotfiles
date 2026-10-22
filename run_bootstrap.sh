@@ -14,6 +14,12 @@ fi
 mkdir -p "$HOME/.claude"
 ln -sf "$TARGET/settings.json" "$HOME/.claude/settings.json"
 ln -sf "$TARGET/statusline-command.sh" "$HOME/.claude/statusline-command.sh"
+
+# env-guard mod + helper scripts (settings.json loads the mod via CLAUDE_CODE_PLUGIN_DIRS)
+mkdir -p "$HOME/.claude/bin" "$HOME/.claude/mods"
+ln -sfn "$TARGET/bin/env-check" "$HOME/.claude/bin/env-check"
+ln -sfn "$TARGET/bin/env-append" "$HOME/.claude/bin/env-append"
+ln -sfn "$TARGET/mods/env-guard" "$HOME/.claude/mods/env-guard"
 echo "claude-code-settings: symlinks created"
 
 # mise (replaces nvm; tool versions in ~/.config/mise/config.toml)
