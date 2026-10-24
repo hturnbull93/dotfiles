@@ -101,6 +101,7 @@ function term() { open -a Terminal "$PWD" }
 
 alias nr="npm run"
 alias p="pnpm"
+alias c="claude"
 alias ls="ls -la"
 alias editzsh="code ~/.zshrc"
 
@@ -182,55 +183,7 @@ fi
 # Claude Code / AI Configuration
 # =============================================================================
 
-export OPENROUTER_API_KEY="{{ .openrouterApiKey }}"
 export CATALYSE_MCP_TOKEN="{{ .catalyseMcpToken }}"
-
-claude-open() {
-  local model
-  model=$(python3 -c "
-import urllib.request, json, sys
-
-with urllib.request.urlopen('https://openrouter.ai/api/v1/models') as r:
-    data = json.loads(r.read())
-
-def score(m):
-    p = m.get('supported_parameters', [])
-    return (
-        ('tools' in p and 'tool_choice' in p),
-        ('structured_outputs' in p),
-        ('reasoning' in p or 'include_reasoning' in p),
-        m.get('context_length', 0),
-    )
-
-free = [m for m in data['data'] if m['pricing']['prompt'] == '0' and m['pricing']['completion'] == '0']
-free = [m for m in free if 'tools' in m.get('supported_parameters', [])]
-free.sort(key=score, reverse=True)
-
-for m in free:
-    p = m.get('supported_parameters', [])
-    flags = ''.join([
-        'T' if 'tool_choice' in p else '-',
-        'S' if 'structured_outputs' in p else '-',
-        'R' if ('reasoning' in p or 'include_reasoning' in p) else '-',
-    ])
-    ctx = str(m['context_length'] // 1000) + 'k'
-    print(f\"{flags}  {ctx:>7}  {m['id']}\")
-" 2>/dev/null | fzf --prompt="Select model (TSR = tool_choice/structured/reasoning): " --height=40% --layout=reverse | awk '{print $NF}')
-
-  [[ -z "$model" ]] && return 1
-
-  ANTHROPIC_BASE_URL="https://openrouter.ai/api" \
-  ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY" \
-  ANTHROPIC_API_KEY="" \
-  command claude --model "$model" "$@"
-}
-
-claude() {
-  unset ANTHROPIC_BASE_URL
-  unset ANTHROPIC_AUTH_TOKEN
-  unset OPENROUTER_API_KEY
-  command claude "$@"
-}
 
 kill-p() {
   local port pid
