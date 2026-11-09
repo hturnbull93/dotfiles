@@ -21,6 +21,7 @@ FPATH=$(brew --prefix)/share/zsh-completions:$FPATH
 zstyle ':completion:*:*:make:*' tag-order targets variables
 
 # Source Oh-My-Zsh
+[[ $OSTYPE == linux* ]] && zstyle ':omz:update' mode disabled
 source $ZSH/oh-my-zsh.sh
 
 case "$HOST" in
