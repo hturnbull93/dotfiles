@@ -274,3 +274,6 @@ docker() {
 
 # Machine-local overrides (not tracked by chezmoi)
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+
+# GAM (Google Workspace admin), where installed; overrides oh-my-zsh git plugin's gam=git am
+[[ -x ~/bin/gam7/gam ]] && alias gam="$HOME/bin/gam7/gam"
